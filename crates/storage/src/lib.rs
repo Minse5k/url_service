@@ -22,7 +22,9 @@ impl SqliteLinkStore {
         if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(dir)?;
         }
-        let options = SqliteConnectOptions::new().filename(path).create_if_missing(true);
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true);
         let pool = SqlitePoolOptions::new().connect_with(options).await?;
         Self::migrated(pool).await
     }

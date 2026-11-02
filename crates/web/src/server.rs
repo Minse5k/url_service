@@ -20,5 +20,9 @@ pub async fn creator_from_env() -> Result<Arc<LinkService>, url_storage::Storage
     let database_path =
         std::env::var("DATABASE_PATH").unwrap_or_else(|_| DEFAULT_DATABASE_PATH.into());
     let store = SqliteLinkStore::open(&database_path).await?;
-    Ok(Arc::new(LinkCreator::new(store, RandomShortCodeGenerator, base_url)))
+    Ok(Arc::new(LinkCreator::new(
+        store,
+        RandomShortCodeGenerator,
+        base_url,
+    )))
 }

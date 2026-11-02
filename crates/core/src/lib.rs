@@ -148,7 +148,9 @@ pub struct CreatedLink {
 pub enum LinkCreationError {
     Store(LinkStoreError),
     /// 새로 만든 단축 코드가 매번 이미 쓰이고 있어 재시도 상한(`attempts`회)을 넘었다.
-    ShortCodeRetriesExhausted { attempts: usize },
+    ShortCodeRetriesExhausted {
+        attempts: usize,
+    },
 }
 
 impl fmt::Display for LinkCreationError {
@@ -156,7 +158,10 @@ impl fmt::Display for LinkCreationError {
         match self {
             Self::Store(e) => write!(f, "could not save link: {e}"),
             Self::ShortCodeRetriesExhausted { attempts } => {
-                write!(f, "could not find a free short code after {attempts} attempts")
+                write!(
+                    f,
+                    "could not find a free short code after {attempts} attempts"
+                )
             }
         }
     }
@@ -185,7 +190,11 @@ impl<S: LinkStore, G: ShortCodeGenerator> LinkCreator<S, G> {
     /// `base_url`은 단축 URL 앞부분(예: `http://localhost:8080`). 끝의 `/`는 무시한다.
     pub fn new(store: S, generator: G, base_url: impl Into<String>) -> Self {
         let base_url = base_url.into().trim_end_matches('/').to_owned();
-        Self { store, generator, base_url }
+        Self {
+            store,
+            generator,
+            base_url,
+        }
     }
 
     pub async fn create_link(
@@ -212,6 +221,8 @@ impl<S: LinkStore, G: ShortCodeGenerator> LinkCreator<S, G> {
                 Err(SaveLinkError::Store(e)) => return Err(LinkCreationError::Store(e)),
             }
         }
-        Err(LinkCreationError::ShortCodeRetriesExhausted { attempts: Self::MAX_ATTEMPTS })
+        Err(LinkCreationError::ShortCodeRetriesExhausted {
+            attempts: Self::MAX_ATTEMPTS,
+        })
     }
 }

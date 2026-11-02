@@ -83,7 +83,11 @@ mod tests {
         let second = label.copied();
 
         label.expire(first);
-        assert_eq!(label.text(), "복사됨", "stale timer must not flip the label back");
+        assert_eq!(
+            label.text(),
+            "복사됨",
+            "stale timer must not flip the label back"
+        );
 
         label.expire(second);
         assert_eq!(label.text(), "복사");
@@ -106,7 +110,11 @@ mod tests {
         assert_eq!(label.text(), "복사됨");
 
         label.expire(failed);
-        assert_eq!(label.text(), "복사됨", "stale failure timer must not flip the label back");
+        assert_eq!(
+            label.text(),
+            "복사됨",
+            "stale failure timer must not flip the label back"
+        );
 
         label.expire(copied);
         assert_eq!(label.text(), "복사");

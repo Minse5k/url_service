@@ -12,8 +12,13 @@ use url_storage::SqliteLinkStore;
 
 const BASE_URL: &str = "http://short.test";
 
-async fn creator() -> (LinkCreator<SqliteLinkStore, RandomShortCodeGenerator>, SqliteLinkStore) {
-    let store = SqliteLinkStore::open_in_memory().await.expect("in-memory DB");
+async fn creator() -> (
+    LinkCreator<SqliteLinkStore, RandomShortCodeGenerator>,
+    SqliteLinkStore,
+) {
+    let store = SqliteLinkStore::open_in_memory()
+        .await
+        .expect("in-memory DB");
     let creator = LinkCreator::new(store.clone(), RandomShortCodeGenerator, BASE_URL);
     (creator, store)
 }
@@ -37,15 +42,26 @@ async fn creating_a_link_returns_a_short_url_whose_short_code_leads_to_the_origi
 
     let short_code = short_code_of(created.short_url.as_str());
     assert_eq!(short_code.as_str().len(), 7);
-    assert!(short_code.as_str().chars().all(|c| c.is_ascii_alphanumeric()));
-    assert_eq!(created.original_url.as_str(), "https://example.com/some/long/path?q=1");
+    assert!(
+        short_code
+            .as_str()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric())
+    );
+    assert_eq!(
+        created.original_url.as_str(),
+        "https://example.com/some/long/path?q=1"
+    );
 
     let stored = store
         .find_link(&short_code)
         .await
         .expect("lookup succeeds")
         .expect("link is stored under its short code");
-    assert_eq!(stored.original_url.as_str(), "https://example.com/some/long/path?q=1");
+    assert_eq!(
+        stored.original_url.as_str(),
+        "https://example.com/some/long/path?q=1"
+    );
 }
 
 #[tokio::test]
@@ -72,7 +88,10 @@ async fn short_url_does_not_double_the_slash_when_base_url_ends_with_one() {
     let store = SqliteLinkStore::open_in_memory().await.unwrap();
     let creator = LinkCreator::new(store, RandomShortCodeGenerator, "http://short.test/");
 
-    let created = creator.create_link(OriginalUrl::new("https://example.com")).await.unwrap();
+    let created = creator
+        .create_link(OriginalUrl::new("https://example.com"))
+        .await
+        .unwrap();
 
     assert_eq!(short_code_of(created.short_url.as_str()).as_str().len(), 7);
 }
@@ -91,13 +110,18 @@ async fn links_survive_reopening_the_database_file() {
         .unwrap();
     store.close().await;
 
-    let reopened = SqliteLinkStore::open(&db_path).await.expect("reopen file DB");
+    let reopened = SqliteLinkStore::open(&db_path)
+        .await
+        .expect("reopen file DB");
     let stored = reopened
         .find_link(&short_code_of(created.short_url.as_str()))
         .await
         .unwrap()
         .expect("link is still stored after reopening");
-    assert_eq!(stored.original_url.as_str(), "https://example.com/persisted");
+    assert_eq!(
+        stored.original_url.as_str(),
+        "https://example.com/persisted"
+    );
 
     reopened.close().await;
     let _ = std::fs::remove_dir_all(&dir);
@@ -114,7 +138,12 @@ impl ScriptedGenerator {
 
 impl ShortCodeGenerator for ScriptedGenerator {
     fn generate(&self) -> ShortCode {
-        let code = self.0.lock().unwrap().pop_front().expect("generator script ran out");
+        let code = self
+            .0
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("generator script ran out");
         ShortCode::new(code)
     }
 }
@@ -125,7 +154,10 @@ async fn short_code_collision_retries_with_a_new_short_code_and_keeps_the_existi
     let generator = ScriptedGenerator::new(["dupCode", "dupCode", "newCode"]);
     let creator = LinkCreator::new(store.clone(), generator, BASE_URL);
 
-    let first = creator.create_link(OriginalUrl::new("https://example.com/first")).await.unwrap();
+    let first = creator
+        .create_link(OriginalUrl::new("https://example.com/first"))
+        .await
+        .unwrap();
     let second = creator
         .create_link(OriginalUrl::new("https://example.com/second"))
         .await
@@ -134,9 +166,17 @@ async fn short_code_collision_retries_with_a_new_short_code_and_keeps_the_existi
     assert_eq!(first.short_url.as_str(), "http://short.test/dupCode");
     assert_eq!(second.short_url.as_str(), "http://short.test/newCode");
 
-    let existing = store.find_link(&ShortCode::new("dupCode")).await.unwrap().unwrap();
+    let existing = store
+        .find_link(&ShortCode::new("dupCode"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(existing.original_url.as_str(), "https://example.com/first");
-    let retried = store.find_link(&ShortCode::new("newCode")).await.unwrap().unwrap();
+    let retried = store
+        .find_link(&ShortCode::new("newCode"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(retried.original_url.as_str(), "https://example.com/second");
 }
 
@@ -147,15 +187,30 @@ async fn link_creation_fails_with_a_distinct_error_after_five_colliding_short_co
     // 6번째 코드("unused")가 쓰이면 상한이 지켜지지 않은 것이다.
     let generator = ScriptedGenerator::new(["dupCode"; 6].into_iter().chain(["unused"]));
     let creator = LinkCreator::new(store.clone(), generator, BASE_URL);
-    creator.create_link(OriginalUrl::new("https://example.com/first")).await.unwrap();
+    creator
+        .create_link(OriginalUrl::new("https://example.com/first"))
+        .await
+        .unwrap();
 
-    let result = creator.create_link(OriginalUrl::new("https://example.com/second")).await;
+    let result = creator
+        .create_link(OriginalUrl::new("https://example.com/second"))
+        .await;
 
     assert!(
-        matches!(result, Err(LinkCreationError::ShortCodeRetriesExhausted { attempts: 5 })),
+        matches!(
+            result,
+            Err(LinkCreationError::ShortCodeRetriesExhausted { attempts: 5 })
+        ),
         "expected retries-exhausted error, got {result:?}"
     );
-    let existing = store.find_link(&ShortCode::new("dupCode")).await.unwrap().unwrap();
+    let existing = store
+        .find_link(&ShortCode::new("dupCode"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(existing.original_url.as_str(), "https://example.com/first");
-    assert_eq!(store.find_link(&ShortCode::new("unused")).await.unwrap(), None);
+    assert_eq!(
+        store.find_link(&ShortCode::new("unused")).await.unwrap(),
+        None
+    );
 }
