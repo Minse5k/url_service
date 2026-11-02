@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] 루트에 Cargo workspace가 있고 `web`, `core`, `storage` 크레이트가 멤버로 등록되어 있다
 - [x] `core`는 Dioxus에 의존하지 않는다
