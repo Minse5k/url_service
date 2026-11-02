@@ -1,0 +1,22 @@
+[package]
+name = "web"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dioxus = { workspace = true, features = ["fullstack"] }
+serde = { version = "1", features = ["derive"] }
+# Server-only: enabled by the `server` feature so the wasm build stays clean.
+url-core = { workspace = true, optional = true }
+url-storage = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tracing = { version = "0.1", optional = true }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[features]
+default = []
+web = ["dioxus/web"]
+server = ["dioxus/server", "dep:url-core", "dep:url-storage", "dep:tokio", "dep:tracing"]

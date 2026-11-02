@@ -1,0 +1,10 @@
+[package]
+name = "url-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+url = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
