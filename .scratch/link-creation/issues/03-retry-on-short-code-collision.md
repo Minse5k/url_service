@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] 단축 코드가 이미 존재하면 새 코드를 생성해 재시도한다
 - [x] 재시도는 횟수 상한이 있고, 상한을 넘으면 링크 생성은 오류를 돌려준다
