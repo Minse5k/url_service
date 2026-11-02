@@ -13,12 +13,16 @@ pub struct CreatedLink {
 }
 
 /// 링크 생성 server function. `url-core`의 링크 생성 서비스를 호출만 한다.
+/// 자세한 오류(저장소 내부 정보)는 서버 로그에만 남기고 브라우저에는 일반 메시지만 보낸다.
 #[post("/api/links", creator: server::Creator)]
 async fn create_link(original_url: String) -> Result<CreatedLink, ServerFnError> {
     let created = creator
         .create_link(url_core::OriginalUrl::new(original_url))
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .map_err(|e| {
+            dioxus::logger::tracing::error!("link creation failed: {e}");
+            ServerFnError::new("internal error")
+        })?;
     Ok(CreatedLink {
         short_url: created.short_url.as_str().to_owned(),
         original_url: created.original_url.as_str().to_owned(),
@@ -41,7 +45,9 @@ fn App() -> Element {
     let mut original_url = use_signal(String::new);
     let mut created = use_signal(|| None::<CreatedLink>);
     let mut error = use_signal(|| None::<String>);
-    let disabled = !input::can_create(&original_url.read());
+    // 요청이 진행 중이면 다시 누를 수 없다(중복 생성과 늦은 응답의 덮어쓰기 방지).
+    let mut pending = use_signal(|| false);
+    let disabled = pending() || !input::can_create(&original_url.read());
 
     rsx! {
         document::Title { "URL Service" }
@@ -58,12 +64,18 @@ fn App() -> Element {
                 r#type: "button",
                 disabled,
                 onclick: move |_| async move {
-                    match create_link(original_url()).await {
+                    pending.set(true);
+                    let result = create_link(original_url.read().trim().to_owned()).await;
+                    pending.set(false);
+                    match result {
                         Ok(link) => {
                             created.set(Some(link));
                             error.set(None);
                         }
-                        Err(e) => error.set(Some(format!("링크를 만들지 못했습니다: {e}"))),
+                        Err(_) => {
+                            created.set(None);
+                            error.set(Some("링크를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.".into()));
+                        }
                     }
                 },
                 "생성"
@@ -97,10 +109,10 @@ fn CopyButton(text: String) -> Element {
             onclick: move |_| {
                 let text = text.clone();
                 async move {
-                    if write_clipboard(text).await.is_err() {
-                        return;
-                    }
-                    let timer = label.write().copied();
+                    let timer = match write_clipboard(text).await {
+                        Ok(()) => label.write().copied(),
+                        Err(_) => label.write().failed(),
+                    };
                     sleep(copy::COPIED_FOR).await;
                     label.write().expire(timer);
                 }
