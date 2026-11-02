@@ -192,11 +192,11 @@ impl<S: LinkStore, G: ShortCodeGenerator> LinkCreator<S, G> {
         &self,
         original_url: OriginalUrl,
     ) -> Result<CreatedLink, LinkCreationError> {
-        let mut link = Link { short_code: self.generator.generate(), original_url };
-        for attempt in 1..=Self::MAX_ATTEMPTS {
-            if attempt > 1 {
-                link.short_code = self.generator.generate();
-            }
+        for _ in 0..Self::MAX_ATTEMPTS {
+            let link = Link {
+                short_code: self.generator.generate(),
+                original_url: original_url.clone(),
+            };
             match self.store.save_link(&link).await {
                 Ok(()) => {
                     return Ok(CreatedLink {
