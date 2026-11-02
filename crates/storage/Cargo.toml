@@ -4,3 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+url-core = { workspace = true }
+sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

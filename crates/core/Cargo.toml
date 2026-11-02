@@ -5,3 +5,4 @@ edition.workspace = true
 
 # Domain logic. Must not depend on Dioxus.
 [dependencies]
+rand = { workspace = true }

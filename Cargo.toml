@@ -10,3 +10,6 @@ edition = "2024"
 dioxus = "0.7.10"
 url-core = { path = "crates/core" }
 url-storage = { path = "crates/storage" }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+rand = "0.10"
