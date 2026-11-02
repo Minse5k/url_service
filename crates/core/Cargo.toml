@@ -1,0 +1,7 @@
+[package]
+name = "url-core"
+version.workspace = true
+edition.workspace = true
+
+# Domain logic. Must not depend on Dioxus.
+[dependencies]
