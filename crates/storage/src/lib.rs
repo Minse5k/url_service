@@ -4,7 +4,7 @@ use std::path::Path;
 
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use url_core::{Link, LinkStore, LinkStoreError, OriginalUrl, ShortCode};
+use url_core::{Link, LinkStore, LinkStoreError, OriginalUrl, SaveLinkError, ShortCode};
 
 /// 저장소를 열 때의 오류.
 pub use sqlx::Error as StorageError;
@@ -51,14 +51,21 @@ impl SqliteLinkStore {
 }
 
 impl LinkStore for SqliteLinkStore {
-    async fn save_link(&self, link: &Link) -> Result<(), LinkStoreError> {
-        sqlx::query("INSERT INTO links (short_code, original_url) VALUES (?, ?)")
+    async fn save_link(&self, link: &Link) -> Result<(), SaveLinkError> {
+        // 미리 조회하지 않고 바로 INSERT한다. 충돌은 `short_code` PRIMARY KEY 제약으로 판단하므로
+        // 경쟁 상태가 없고, 기존 행은 바뀌지 않는다.
+        let result = sqlx::query("INSERT INTO links (short_code, original_url) VALUES (?, ?)")
             .bind(link.short_code.as_str())
             .bind(link.original_url.as_str())
             .execute(&self.pool)
-            .await
-            .map_err(LinkStoreError::new)?;
-        Ok(())
+            .await;
+        match result {
+            Ok(_) => Ok(()),
+            Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
+                Err(SaveLinkError::ShortCodeTaken)
+            }
+            Err(e) => Err(SaveLinkError::Store(LinkStoreError::new(e))),
+        }
     }
 
     async fn find_link(&self, short_code: &ShortCode) -> Result<Option<Link>, LinkStoreError> {
