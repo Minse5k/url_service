@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 - [x] 단축 URL이 표시될 때 "복사" 버튼이 함께 보인다
 - [ ] 버튼을 누르면 단축 URL 전체가 클립보드에 복사된다
