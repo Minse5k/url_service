@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+mod copy;
 mod input;
 #[cfg(feature = "server")]
 mod server;
@@ -72,6 +73,8 @@ fn App() -> Element {
                     p {
                         "단축 URL: "
                         a { href: "{link.short_url}", "{link.short_url}" }
+                        " "
+                        CopyButton { key: "{link.short_url}", text: link.short_url.clone() }
                     }
                     p { "원본 URL: {link.original_url}" }
                 }
@@ -81,4 +84,46 @@ fn App() -> Element {
             }
         }
     }
+}
+
+/// 누르면 `text`를 클립보드에 복사하고, `copy::COPIED_FOR` 동안 "복사됨"을 보여 준다.
+#[component]
+fn CopyButton(text: String) -> Element {
+    let mut label = use_signal(copy::CopyLabel::default);
+
+    rsx! {
+        button {
+            r#type: "button",
+            onclick: move |_| {
+                let text = text.clone();
+                async move {
+                    if write_clipboard(text).await.is_err() {
+                        return;
+                    }
+                    let timer = label.write().copied();
+                    sleep(copy::COPIED_FOR).await;
+                    label.write().expire(timer);
+                }
+            },
+            "{label.read().text()}"
+        }
+    }
+}
+
+/// 브라우저 클립보드에 `text`를 쓴다. 값은 문자열 조립 대신 채널로 넘긴다.
+async fn write_clipboard(text: String) -> Result<(), document::EvalError> {
+    let eval = document::eval(
+        "const text = await dioxus.recv(); await navigator.clipboard.writeText(text); return true;",
+    );
+    eval.send(text)?;
+    eval.await.map(|_| ())
+}
+
+/// 브라우저의 `setTimeout`으로 기다린다. wasm에서도 동작하고 의존성이 늘지 않는다.
+async fn sleep(duration: std::time::Duration) {
+    let js = format!(
+        "await new Promise(r => setTimeout(r, {})); return true;",
+        duration.as_millis()
+    );
+    let _ = document::eval(&js).await;
 }
