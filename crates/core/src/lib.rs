@@ -72,9 +72,37 @@ impl Error for LinkStoreError {
     }
 }
 
+/// 링크를 저장하지 못한 이유.
+#[derive(Debug)]
+pub enum SaveLinkError {
+    /// 같은 단축 코드의 링크가 이미 있다(저장소의 유일성 제약으로 판단). 기존 링크는 그대로다.
+    ShortCodeTaken,
+    Store(LinkStoreError),
+}
+
+impl fmt::Display for SaveLinkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ShortCodeTaken => write!(f, "short code is already taken"),
+            Self::Store(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Error for SaveLinkError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::ShortCodeTaken => None,
+            Self::Store(e) => Some(e),
+        }
+    }
+}
+
 /// 링크 저장소.
 pub trait LinkStore: Send + Sync {
-    fn save_link(&self, link: &Link) -> impl Future<Output = Result<(), LinkStoreError>> + Send;
+    /// 새 링크를 저장한다. 단축 코드가 이미 쓰이고 있으면 덮어쓰지 않고
+    /// [`SaveLinkError::ShortCodeTaken`]을 돌려준다.
+    fn save_link(&self, link: &Link) -> impl Future<Output = Result<(), SaveLinkError>> + Send;
 
     fn find_link(
         &self,
@@ -119,12 +147,17 @@ pub struct CreatedLink {
 #[derive(Debug)]
 pub enum LinkCreationError {
     Store(LinkStoreError),
+    /// 새로 만든 단축 코드가 매번 이미 쓰이고 있어 재시도 상한(`attempts`회)을 넘었다.
+    ShortCodeRetriesExhausted { attempts: usize },
 }
 
 impl fmt::Display for LinkCreationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Store(e) => write!(f, "could not save link: {e}"),
+            Self::ShortCodeRetriesExhausted { attempts } => {
+                write!(f, "could not find a free short code after {attempts} attempts")
+            }
         }
     }
 }
@@ -133,6 +166,7 @@ impl Error for LinkCreationError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Store(e) => Some(e),
+            Self::ShortCodeRetriesExhausted { .. } => None,
         }
     }
 }
@@ -145,6 +179,9 @@ pub struct LinkCreator<S, G> {
 }
 
 impl<S: LinkStore, G: ShortCodeGenerator> LinkCreator<S, G> {
+    /// 단축 코드 충돌 시 새 코드로 시도하는 최대 횟수(첫 시도 포함).
+    pub const MAX_ATTEMPTS: usize = 5;
+
     /// `base_url`은 단축 URL 앞부분(예: `http://localhost:8080`). 끝의 `/`는 무시한다.
     pub fn new(store: S, generator: G, base_url: impl Into<String>) -> Self {
         let base_url = base_url.into().trim_end_matches('/').to_owned();
@@ -155,11 +192,26 @@ impl<S: LinkStore, G: ShortCodeGenerator> LinkCreator<S, G> {
         &self,
         original_url: OriginalUrl,
     ) -> Result<CreatedLink, LinkCreationError> {
-        let link = Link { short_code: self.generator.generate(), original_url };
-        self.store.save_link(&link).await.map_err(LinkCreationError::Store)?;
-        Ok(CreatedLink {
-            short_url: ShortUrl(format!("{}/{}", self.base_url, link.short_code.as_str())),
-            original_url: link.original_url,
-        })
+        let mut link = Link { short_code: self.generator.generate(), original_url };
+        for attempt in 1..=Self::MAX_ATTEMPTS {
+            if attempt > 1 {
+                link.short_code = self.generator.generate();
+            }
+            match self.store.save_link(&link).await {
+                Ok(()) => {
+                    return Ok(CreatedLink {
+                        short_url: ShortUrl(format!(
+                            "{}/{}",
+                            self.base_url,
+                            link.short_code.as_str()
+                        )),
+                        original_url: link.original_url,
+                    });
+                }
+                Err(SaveLinkError::ShortCodeTaken) => continue,
+                Err(SaveLinkError::Store(e)) => return Err(LinkCreationError::Store(e)),
+            }
+        }
+        Err(LinkCreationError::ShortCodeRetriesExhausted { attempts: Self::MAX_ATTEMPTS })
     }
 }
