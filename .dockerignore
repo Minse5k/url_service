@@ -1,0 +1,6 @@
+target/
+cloudflare/
+.git/
+.env
+.claude/
+.DS_Store
