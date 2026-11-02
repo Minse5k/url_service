@@ -11,7 +11,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] 원본 URL을 입력하고 "생성"을 누르면 단축 URL과 원본 URL이 화면에 표시된다
 - [x] 단축 코드는 base62 문자로 된 7자이다
