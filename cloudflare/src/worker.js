@@ -1,6 +1,7 @@
 // 공개 접점(Cloudflare Worker).
 // - `/숫자`와 `/api/*`는 Render의 Rust 백엔드로 그대로 넘긴다. 302는 따라가지 않고 브라우저에 그대로 돌려준다.
 // - 그 밖의 경로(화면 HTML, wasm/js)는 정적 자산으로 응답한다.
+// `http://` 요청은 같은 주소의 `https://`로 301 리디렉션한다.
 // 백엔드 주소는 wrangler.toml의 `BACKEND_URL` 변수로만 받는다. 이 Worker에는 비밀값이 없다.
 
 const BACKEND_PATH = /^\/(?:\d+|api\/.*)$/;
@@ -8,6 +9,10 @@ const BACKEND_PATH = /^\/(?:\d+|api\/.*)$/;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.protocol === "http:") {
+      url.protocol = "https:";
+      return Response.redirect(url.toString(), 301);
+    }
     if (!BACKEND_PATH.test(url.pathname)) {
       return env.ASSETS.fetch(request);
     }

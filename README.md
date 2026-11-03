@@ -2,9 +2,9 @@
 
 ## 배포 URL
 
-- 서비스 URL: (배포 후 기입)
-- 테스트 단축 URL: (배포 후 기입)
-- 테스트 원본 URL: (배포 후 기입)
+- 서비스 URL: https://url-service.url-service-cloudflare.workers.dev
+- 테스트 단축 URL: https://url-service.url-service-cloudflare.workers.dev/1
+- 테스트 원본 URL: https://www.rust-lang.org/learn?lang=ko#get-started
 
 긴 URL을 `/123`처럼 숫자로만 된 주소로 줄이는 서비스입니다. 로그인 없이 누구나 만들 수 있고, 한 번 만든 링크는 바뀌지 않습니다.
 
@@ -169,10 +169,27 @@ cd cloudflare && npm install && npx wrangler login && npx wrangler deploy
 | 없는 번호 | `GET /999999` | 404 안내 페이지 |
 | 변경 요청 | `DELETE /1`, `PUT /api/links/1` | 405 |
 
+### 배포 환경 확인 (2026-11-03, 공개 URL에 curl과 브라우저로 직접 요청)
+
+`https://url-service.url-service-cloudflare.workers.dev` (Cloudflare Worker → Render 백엔드 → Render PostgreSQL)에 쿠키나 로그인 없이 요청한 결과입니다.
+
+| 시나리오 | 요청 | 결과 |
+|---|---|---|
+| 화면 | `GET /` | 200, 하이드레이션 데이터 포함. 브라우저에서 입력 → 생성 → `/3`과 복사 버튼 표시 |
+| 생성 | `POST /api/links` (`https://www.rust-lang.org/learn?lang=ko#get-started`) | 200, `https://url-service.url-service-cloudflare.workers.dev/1` |
+| 같은 URL 재입력 | 같은 요청을 한 번 더 | 200, 새 번호 `/2` |
+| 리디렉션 | `GET /1` | 302, `Location: https://www.rust-lang.org/learn?lang=ko#get-started`, `Cache-Control: no-store` |
+| 잘못된 스킴 | `ftp://example.org` | 400, "http:// 또는 https:// 로 시작하는 URL만 사용할 수 있습니다." |
+| 자기 자신 | `https://url-service.url-service-cloudflare.workers.dev/1` | 400, "이 서비스의 단축 URL은 다시 단축할 수 없습니다." |
+| 없는 번호 | `GET /999999999` | 404, "존재하지 않는 단축 주소입니다…" |
+| 숫자가 아닌 경로 | `GET /007`, `GET /abc` | 404 |
+| 변경 요청 | `DELETE /1`, `PUT /api/links/1` | 405, 이후 `GET /1`은 같은 `Location` |
+| HTTP 접속 | `http://…/1` | 301 → `https://…/1` |
+
 ### 배포 환경에서 재현하는 방법
 
 ```bash
-SVC=https://<서비스 URL>
+SVC=https://url-service.url-service-cloudflare.workers.dev
 curl -s -X POST -H 'content-type: application/json' -d '{"original_url":"https://example.org/a/b?x=1#frag"}' $SVC/api/links
 curl -sI $SVC/<번호>            # 302 + Location
 curl -sI $SVC/999999999         # 404
