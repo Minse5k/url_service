@@ -12,5 +12,5 @@ run_worker_first = true
 not_found_handling = "404-page"
 
 [vars]
-# Railway 백엔드의 공개 주소. 비밀값이 아니다(DB 접속 정보는 Railway에만 있다).
-BACKEND_URL = "https://url-service-production.up.railway.app"
+# Render 백엔드의 공개 주소. 비밀값이 아니다(DB 접속 정보는 Render에만 있다).
+BACKEND_URL = "https://url-service-api.onrender.com"

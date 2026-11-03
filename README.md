@@ -9,16 +9,18 @@
 긴 URL을 `/123`처럼 숫자로만 된 주소로 줄이는 서비스입니다. 로그인 없이 누구나 만들 수 있고, 한 번 만든 링크는 바뀌지 않습니다.
 
 - 화면·공개 접점: Cloudflare Worker (정적 자산 + 프록시)
-- 백엔드(생성 API·리디렉션): Railway에서 실행하는 Rust 서버 (Dioxus 0.7 fullstack, axum)
-- DB: Railway PostgreSQL
+- 백엔드(생성 API·리디렉션): Render에서 실행하는 Rust 서버 (Dioxus 0.7 fullstack, axum)
+- DB: Render PostgreSQL
+
+> 과제는 백엔드·DB를 Railway에 두도록 안내하지만, Railway가 새 계정의 체험판을 중단해 유료 플랜 없이는 배포할 수 없어 Render로 대신 배포했습니다. 백엔드는 같은 Docker 이미지라 Railway로 옮길 때는 `render.yaml` 대신 Railway 서비스와 변수 두 개(`DATABASE_URL`, `BASE_URL`)만 설정하면 됩니다.
 
 ## 구조
 
 ```
 브라우저 ──HTTPS──▶ Cloudflare Worker (공개 주소)
                      ├─ /, /assets/*      → 정적 자산(미리 렌더링한 HTML + wasm)
-                     └─ /숫자, /api/*      → Railway 백엔드로 프록시 (302는 그대로 전달)
-                                             └─ PostgreSQL (Railway)
+                     └─ /숫자, /api/*      → Render 백엔드로 프록시  (302는 그대로 전달)
+                                             └─ PostgreSQL (Render)
 ```
 
 | 경로 | 설명 |
@@ -28,7 +30,7 @@
 | `crates/web` | Dioxus fullstack 앱: 화면, 생성 server function, `/숫자` 리디렉션 |
 | `cloudflare/` | Worker 코드(`src/worker.js`)와 `wrangler.toml` |
 | `scripts/build-cloudflare.sh` | Cloudflare에 올릴 `cloudflare/public/`을 만드는 스크립트 |
-| `Dockerfile`, `railway.toml` | Railway 백엔드 빌드·배포 설정 |
+| `Dockerfile`, `render.yaml` | Render 백엔드·DB 빌드·배포 설정(Blueprint) |
 
 ## 동작 규칙
 
@@ -65,10 +67,10 @@
 
 | 이름 | 어디에 | 설명 |
 |---|---|---|
-| `DATABASE_URL` | Railway 백엔드 | PostgreSQL 접속 주소. **비밀값**. Railway 변수 참조 `${{Postgres.DATABASE_URL}}`로 설정 |
-| `BASE_URL` | Railway 백엔드 | 단축 URL 앞부분 = 공개 서비스 주소(Cloudflare). 예: `https://url-service.<계정>.workers.dev` |
-| `IP`, `PORT` | Railway 백엔드 | 바인딩 주소. 이미지 기본값 `IP=0.0.0.0`, `PORT`는 Railway가 주입 |
-| `BACKEND_URL` | Cloudflare Worker | Railway 백엔드 공개 주소. 비밀값 아님, `cloudflare/wrangler.toml`의 `[vars]` |
+| `DATABASE_URL` | Render 백엔드 | PostgreSQL 접속 주소. **비밀값**. `render.yaml`의 `fromDatabase`로 Render가 주입(값을 저장소에 두지 않음) |
+| `BASE_URL` | Render 백엔드 | 단축 URL 앞부분 = 공개 서비스 주소(Cloudflare). 예: `https://url-service.<계정>.workers.dev` |
+| `IP`, `PORT` | Render 백엔드 | 바인딩 주소. 이미지 기본값 `IP=0.0.0.0`, `PORT`는 Render가 주입 |
+| `BACKEND_URL` | Cloudflare Worker | Render 백엔드 공개 주소. 비밀값 아님, `cloudflare/wrangler.toml`의 `[vars]` |
 | `TEST_DATABASE_URL` | 로컬 테스트 | 설정하면 Postgres 통합 테스트 실행 |
 
 예시는 [`.env.example`](.env.example)에 있습니다. DB 비밀번호나 서비스 토큰은 저장소·브라우저 코드 어디에도 넣지 않습니다. 브라우저 코드는 같은 출처의 `/api/links`만 호출하고, 백엔드 주소조차 알지 못합니다.
@@ -109,19 +111,22 @@ cd cloudflare && npm install && npx wrangler dev --port 8787 --var BACKEND_URL:h
 
 ## 배포
 
-### 1. Railway (백엔드 + DB)
+### 1. Render (백엔드 + DB)
 
-1. Railway 프로젝트를 만들고 **PostgreSQL** 서비스를 추가합니다.
-2. 이 저장소로 서비스를 하나 더 추가합니다(GitHub 연결 또는 `railway up`). 루트의 `railway.toml`이 `Dockerfile` 빌드를 지정합니다.
-   - Dockerfile은 `dx bundle --package web --web --release`로 서버 바이너리와 `public/`을 만들고, 슬림 이미지에서 `./server`를 실행합니다.
-3. 백엔드 서비스 변수:
-   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (Railway 참조 변수, 값을 직접 복사하지 않음)
-   - `BASE_URL` = Cloudflare 공개 주소
-4. Networking에서 공개 도메인을 생성합니다(`*.up.railway.app`). 헬스체크는 `/`입니다.
+1. Render 대시보드에서 **New > Blueprint**를 누르고 이 GitHub 저장소를 연결합니다. 루트의 `render.yaml`이 두 리소스를 만듭니다.
+   - `url-service-db`: PostgreSQL (free, singapore)
+   - `url-service-api`: `Dockerfile`로 빌드하는 웹 서비스 (free, singapore, 헬스체크 `/`)
+2. Dockerfile은 `dx bundle --package web --web --release`로 서버 바이너리와 `public/`을 만들고, 슬림 이미지에서 `./server`를 실행합니다. 마이그레이션은 서버가 시작할 때 적용합니다.
+3. 환경 변수
+   - `DATABASE_URL`: `fromDatabase`로 Render가 DB의 내부 접속 주소를 주입합니다. 값을 복사하거나 저장소에 넣지 않습니다.
+   - `BASE_URL`: Cloudflare 공개 주소. `render.yaml`에 적혀 있습니다(비밀값 아님).
+4. 배포가 끝나면 서비스 주소(`https://<서비스>.onrender.com`)를 Cloudflare의 `BACKEND_URL`에 넣습니다.
+
+무료 플랜 참고: 웹 서비스는 15분 동안 요청이 없으면 잠들고, 다음 요청 때 깨어나느라 수십 초 걸릴 수 있습니다. 무료 PostgreSQL은 생성 후 30일이 지나면 만료됩니다.
 
 ### 2. Cloudflare (화면 + 공개 접점)
 
-1. `cloudflare/wrangler.toml`의 `BACKEND_URL`을 Railway 공개 도메인으로 설정합니다.
+1. `cloudflare/wrangler.toml`의 `BACKEND_URL`을 Render 서비스 주소(`https://<서비스>.onrender.com`)로 설정합니다.
 2. 정적 파일을 만들고 배포합니다.
 
 ```bash
@@ -137,8 +142,8 @@ cd cloudflare && npm install && npx wrangler login && npx wrangler deploy
 
 | 요청 경로 | 처리 |
 |---|---|
-| `^/\d+$` (예: `/123`) | Railway로 프록시, `redirect: "manual"`이라 302·`Location`을 그대로 브라우저에 전달 |
-| `/api/*` (예: `POST /api/links`) | Railway로 프록시 |
+| `^/\d+$` (예: `/123`) | Render로 프록시, `redirect: "manual"`이라 302·`Location`을 그대로 브라우저에 전달 |
+| `/api/*` (예: `POST /api/links`) | Render로 프록시 |
 | 그 밖 (`/`, `/assets/*`) | 정적 자산. 없는 경로는 `404.html` |
 
 ## 검증
